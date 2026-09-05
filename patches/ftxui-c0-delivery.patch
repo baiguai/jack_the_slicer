@@ -1,0 +1,17 @@
+
+diff --git a/src/ftxui/component/terminal_input_parser.cpp b/src/ftxui/component/terminal_input_parser.cpp
+index 3ba0e69d..01b13c69 100644
+--- a/src/ftxui/component/terminal_input_parser.cpp
++++ b/src/ftxui/component/terminal_input_parser.cpp
+@@ -166,10 +166,6 @@ TerminalInputParser::Output TerminalInputParser::Parse() {
+   }
+ 
+   switch (Current()) {
+-    case 24:  // CAN NOLINT
+-    case 26:  // SUB NOLINT
+-      return DROP;
+-
+     case '\x1B':
+       return ParseESC();
+     default:
+    
