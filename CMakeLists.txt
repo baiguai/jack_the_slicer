@@ -7,7 +7,6 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # Create executable
 add_executable(App
     src/main.cpp
-    src/app.cpp
     src/config.cpp
     src/file_browser.cpp
 )
