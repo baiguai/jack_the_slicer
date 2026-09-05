@@ -62,8 +62,8 @@ os.write(master, b'\r'); time.sleep(0.4); drain(1.2)
 check('row 3 appears once both lengths are set', b'Slices:' in state['last'])
 check('count is bars * slices', b'Slices: 16' in state['last'])
 check('breakdown shown', '×'.encode('utf-8') in state['last'])
-check('first slice listed', b'     1  None' in state['last'])
-check('all 16 slices visible without scrolling', b'    16  None' in state['last'])
+check('first slice listed', b'     1  Shuffle' in state['last'])
+check('all 16 slices visible without scrolling', b'    16  Shuffle' in state['last'])
 check('no scroll markers on a tall terminal', '⋮'.encode('utf-8') not in state['last'])
 
 # Down -> slice column, Down -> slice 2, Enter -> open effect menu.
@@ -73,18 +73,22 @@ os.write(master, b'\r'); time.sleep(0.4); drain(1.0)
 check('effect menu opens on Enter', b'Shuffle' in state['last'])
 for effect in [b'None', b'Shuffle', b'Reverse', b'Stretch', b'Squish']:
     check(f'effect listed: {effect.decode()}', effect in state['last'])
-check('None is highlighted first', b'> None' in state['last'])
+check('Shuffle is highlighted first', b'> Shuffle' in state['last'])
+check('slice still defaults to Shuffle', b'     2  Shuffle' in state['last'])
 
 # Esc cancels the menu without applying.
 os.write(master, b'\x1b'); time.sleep(0.4); drain(1.0)
-check('Esc closes the menu without applying', b'> None' not in state['last'])
+check('Esc closes the menu without applying', b'> Shuffle' not in state['last'])
+check('slice unchanged after cancel', b'     2  Shuffle' in state['last'])
 
-# Reopen, choose Shuffle, apply.
+# Reopen, choose Reverse (move down twice), apply.
 os.write(master, b'\r'); time.sleep(0.4); drain(1.0)
-os.write(master, b'\x1b[B'); time.sleep(0.3); drain(0.6)   # -> Shuffle
+os.write(master, b'\x1b[B'); time.sleep(0.3); drain(0.6)   # -> Reverse
+os.write(master, b'\x1b[B'); time.sleep(0.3); drain(0.6)   # -> Stretch
+os.write(master, b'\x1b[A'); time.sleep(0.3); drain(0.6)   # back up to Reverse
 os.write(master, b'\r'); time.sleep(0.4); drain(1.0)
-check('Enter applies the highlighted effect', b'     2  Shuffle' in state['last'])
-check('no menu remnant', b'> Shuffle' not in state['last'])
+check('Enter applies the highlighted effect', b'     2  Reverse' in state['last'])
+check('no menu remnant', b'> Reverse' not in state['last'])
 
 # Esc clears the effect on the focused slice.
 os.write(master, b'\x1b'); time.sleep(0.4); drain(1.0)
@@ -98,10 +102,10 @@ os.write(master, b'\x1b[B'); time.sleep(0.3); drain(0.6)   # back into column
 def focused_slice():
     s = state['last'].decode('utf-8', 'replace')
     for l in s.splitlines():
-        if '\x1b[1m\x1b[36m' in l and '  None' in l:
+        if '\x1b[1m\x1b[36m' in l and 'Shuffle' in l:
             toks = l.split()
             for i, t in enumerate(toks):
-                if t == 'None':
+                if t == 'Shuffle':
                     return toks[i-1] if i > 0 else None
     return None
 for _ in range(20):
@@ -110,13 +114,13 @@ for _ in range(20):
         break
 check('scrolled to last slice', focused_slice() == '16')
 check('scroll marker shown', '⋮'.encode('utf-8') in state['last'])
-check('top rows hidden while scrolled', b'     5  None' not in state['last'])
+check('top rows hidden while scrolled', b'     5  Shuffle' not in state['last'])
 for _ in range(20):
     os.write(master, b'\x1b[A'); time.sleep(0.2); drain(0.4)
     if focused_slice() == '1':
         break
 check('back to first slice', focused_slice() == '1')
-check('top rows visible again at top', b'     6  None' in state['last'])
+check('top rows visible again at top', b'     6  Shuffle' in state['last'])
 
 os.write(master, b'q')
 time.sleep(1.0)

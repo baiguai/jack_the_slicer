@@ -101,7 +101,7 @@ int RunApp() {
     const int per_bar = 1 << slice_selected;
     const int total = (bars_selected + 1) * per_bar;
     if (static_cast<int>(slice_effects.size()) != total) {
-      slice_effects.assign(total, 0);
+      slice_effects.assign(total, 1);
     }
     total_slices = total;
     if (column_focus >= total_slices) {
