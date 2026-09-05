@@ -8,6 +8,7 @@
 #include <ftxui/component/screen_interactive.hpp>
 #include <ftxui/screen/color.hpp>
 
+#include "audio.hpp"
 #include "config.hpp"
 #include "file_browser.hpp"
 
@@ -42,6 +43,7 @@ int RunApp() {
   std::string loaded_file;
   fs::path last_directory = config.last_directory;
   bool show_modal = false;
+  jack::WavPlayer player;
 
   const auto on_open = [&](const fs::path& path) {
     loaded_file = path.string();
@@ -49,6 +51,7 @@ int RunApp() {
     if (last_directory.empty()) {
       last_directory = path.root_path();
     }
+    player.Stop();
     Config updated = config;
     updated.last_directory = last_directory;
     SaveConfig(updated);
@@ -59,6 +62,7 @@ int RunApp() {
   auto file_browser = ftxui::Make<FileBrowser>(on_open, on_cancel);
 
   auto main_screen = ftxui::Renderer([&] {
+    player.Poll();
     ftxui::Elements lines;
     lines.push_back(ftxui::text(" jack_the_slicer ") | ftxui::bold);
     lines.push_back(ftxui::separator());
@@ -70,10 +74,15 @@ int RunApp() {
           ftxui::text("  " + loaded_file) |
           ftxui::color(ftxui::Color::Green));
     }
+    if (player.IsPlaying()) {
+      const std::string loop_note = player.IsLooping() ? " (looped)" : "";
+      lines.push_back(ftxui::text("Playing: " + player.CurrentFile() +
+                                  loop_note) |
+                      ftxui::color(ftxui::Color::Cyan));
+    }
     lines.push_back(ftxui::filler());
     lines.push_back(ftxui::separator());
-    lines.push_back(
-        ftxui::text(" Ctrl+O  Open .wav    Q  Quit ") | ftxui::dim);
+    lines.push_back(ftxui::text(" Ctrl+O  Open .wav    Q  Quit ") | ftxui::dim);
     return ftxui::vbox(std::move(lines)) | ftxui::border;
   });
 
@@ -81,6 +90,16 @@ int RunApp() {
     if (!show_modal && event == kCtrlO) {
       show_modal = true;
       file_browser->Open(last_directory);
+      return true;
+    }
+    if (!show_modal && !loaded_file.empty() &&
+        (event == ftxui::Event::Character('p') ||
+         event == ftxui::Event::Character('P'))) {
+      player.Play(loaded_file, event == ftxui::Event::Character('P'));
+      return true;
+    }
+    if (!show_modal && event == ftxui::Event::Escape && player.IsPlaying()) {
+      player.Stop();
       return true;
     }
     if (!show_modal && (event == ftxui::Event::Character('q') ||
