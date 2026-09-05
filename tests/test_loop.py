@@ -54,7 +54,7 @@ os.write(master, b'\r')
 time.sleep(0.8)
 drain(1.2, 'tone.wav')
 check('selector shown once a .wav is loaded', b'Loop length' in state['last'])
-check('no selection initially', '(●)'.encode() not in state['last'])
+check('no selection initially', '●'.encode() not in state['last'])
 check('four options present',
       all(s in state['buf'] for s in [b'1 bar', b'2 bars', b'3 bars', b'4 bars']))
 
@@ -64,20 +64,20 @@ os.write(master, b'\x1b[C')
 time.sleep(0.3); drain(0.6)
 os.write(master, b'\r')                   # Enter -> select 3 bars
 time.sleep(0.4); drain(1.0)
-check('Enter selects the focused option', '(●) 3 bars'.encode() in state['last'])
-check('exactly one option selected', state['last'].count('(●)'.encode()) == 1)
+check('Enter selects the focused option', '● 3 bars'.encode() in state['last'])
+check('exactly one option selected', state['last'].count('●'.encode()) == 1)
 
 os.write(master, b'\x1b[D')               # ArrowLeft -> focus '2 bars'
 time.sleep(0.3); drain(0.6)
 os.write(master, b'\r')                   # Enter -> reselect
 time.sleep(0.4); drain(1.0)
-check('selection moves to 2 bars', '(●) 2 bars'.encode() in state['last'])
-check('previous selection cleared', '(●) 3 bars'.encode() not in state['last'])
-check('still exactly one selected', state['last'].count('(●)'.encode()) == 1)
+check('selection moves to 2 bars', '● 2 bars'.encode() in state['last'])
+check('previous selection cleared', '● 3 bars'.encode() not in state['last'])
+check('still exactly one selected', state['last'].count('●'.encode()) == 1)
 
 os.write(master, b'\x1b')                 # Esc -> deselect
 time.sleep(0.4); drain(1.0)
-check('Esc deselects the loop length', '(●)'.encode() not in state['last'])
+check('Esc deselects the loop length', '●'.encode() not in state['last'])
 check('selector row still visible after deselect', b'Loop length' in state['last'])
 
 os.write(master, b'q')

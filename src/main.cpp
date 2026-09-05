@@ -2,6 +2,7 @@
 
 #include <filesystem>
 #include <string>
+#include <vector>
 
 #include <ftxui/component/component.hpp>
 #include <ftxui/component/event.hpp>
@@ -45,8 +46,11 @@ int RunApp() {
   fs::path last_directory = config.last_directory;
   bool show_modal = false;
   bool show_help = false;
-  int bars_focus = 0;      // highlighted option in the loop-length row (0..3)
-  int bars_selected = 0;   // 0 = none, otherwise 1..4 bars of 4/4
+  int active_row = 0;       // 0 = loop-length row, 1 = slice-length row
+  int bars_focus = 0;       // highlighted loop-length option (0..3)
+  int slice_focus = 0;      // highlighted slice-length option (0..6)
+  int bars_selected = -1;   // selected loop-length option, -1 = none
+  int slice_selected = -1;  // selected slice-length option, -1 = none
   jack::WavPlayer player;
 
   const auto on_open = [&](const fs::path& path) {
@@ -66,24 +70,34 @@ int RunApp() {
   auto file_browser = ftxui::Make<FileBrowser>(on_open, on_cancel);
   auto help = ftxui::Make<HelpDialog>([&]() { show_help = false; });
 
-  static const char* kBarLabels[] = {"1 bar", "2 bars", "3 bars", "4 bars"};
-  const auto render_loop_row = [&]() -> ftxui::Element {
+  const std::vector<std::string> kBarOptions = {"1", "2", "3", "4"};
+  const std::vector<std::string> kSliceOptions = {"1", "2", "4", "8",
+                                                  "16", "32", "64"};
+  const auto render_option_row =
+      [&](const std::string& row_title, const std::string& unit,
+          const std::vector<std::string>& options, int focus, int selected,
+          bool active) -> ftxui::Element {
     ftxui::Elements opts;
-    opts.push_back(ftxui::text(" Loop length (4/4): "));
-    for (int i = 0; i < 4; ++i) {
-      const bool focused = (i == bars_focus);
-      const bool selected = (bars_selected == i + 1);
-      std::string mark = selected ? "(●)" : "(  )";
-      auto opt = ftxui::text(" " + mark + " " + kBarLabels[i] + " ");
+    auto label = ftxui::text(" " + row_title + " ");
+    label |= active ? (ftxui::color(ftxui::Color::Cyan) | ftxui::bold)
+                    : ftxui::dim;
+    opts.push_back(label);
+    for (int i = 0; i < static_cast<int>(options.size()); ++i) {
+      const bool focused = (i == focus);
+      const bool is_selected = (i == selected);
+      std::string mark = is_selected ? "●" : "○";
+      std::string val = unit == "/" ? "1/" + options[i]
+                                    : options[i] + " bar" +
+                                          (options[i] == "1" ? "" : "s");
+      auto opt = ftxui::text(mark + " " + val + "  ");
       if (focused) {
         opt |= ftxui::color(ftxui::Color::Cyan) | ftxui::bold;
       }
-      if (selected) {
+      if (is_selected) {
         opt |= ftxui::color(ftxui::Color::Green) | ftxui::bold;
       }
       opts.push_back(std::move(opt));
     }
-    opts.push_back(ftxui::filler());
     return ftxui::hbox(std::move(opts));
   };
 
@@ -108,7 +122,12 @@ int RunApp() {
     }
     if (!loaded_file.empty()) {
       lines.push_back(ftxui::separator());
-      lines.push_back(render_loop_row());
+      lines.push_back(
+          render_option_row("Loop length (4/4)", "bar", kBarOptions,
+                            bars_focus, bars_selected, active_row == 0));
+      lines.push_back(
+          render_option_row("Slice length", "/", kSliceOptions, slice_focus,
+                            slice_selected, active_row == 1));
     }
     lines.push_back(ftxui::filler());
     lines.push_back(ftxui::separator());
@@ -133,21 +152,49 @@ int RunApp() {
       return true;
     }
     if (!show_modal && !loaded_file.empty()) {
+      if (event == ftxui::Event::ArrowDown) {
+        if (active_row < 1) {
+          active_row++;
+        }
+        return true;
+      }
+      if (event == ftxui::Event::ArrowUp) {
+        if (active_row > 0) {
+          active_row--;
+        }
+        return true;
+      }
       if (event == ftxui::Event::ArrowLeft) {
-        bars_focus = (bars_focus + 3) % 4;
+        if (active_row == 0) {
+          bars_focus = (bars_focus + 3) % 4;
+        } else {
+          slice_focus = (slice_focus + 6) % 7;
+        }
         return true;
       }
       if (event == ftxui::Event::ArrowRight) {
-        bars_focus = (bars_focus + 1) % 4;
+        if (active_row == 0) {
+          bars_focus = (bars_focus + 1) % 4;
+        } else {
+          slice_focus = (slice_focus + 1) % 7;
+        }
         return true;
       }
       if (event == ftxui::Event::Return) {
-        bars_selected = bars_focus + 1;
+        if (active_row == 0) {
+          bars_selected = bars_focus;
+        } else {
+          slice_selected = slice_focus;
+        }
         return true;
       }
     }
     if (!show_modal && event == ftxui::Event::Escape && !loaded_file.empty()) {
-      bars_selected = 0;
+      if (active_row == 0) {
+        bars_selected = -1;
+      } else {
+        slice_selected = -1;
+      }
       if (player.IsPlaying()) {
         player.Stop();
       }
