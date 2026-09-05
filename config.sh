@@ -9,6 +9,7 @@ SOURCES=(
     "src/config.cpp"
     "src/file_browser.cpp"
     "src/audio.cpp"
+    "src/help_dialog.cpp"
 )
 
 LIBS=(
@@ -22,4 +23,5 @@ HEADERS=(
     "src/config.hpp"
     "src/file_browser.hpp"
     "src/audio.hpp"
+    "src/help_dialog.hpp"
 )
