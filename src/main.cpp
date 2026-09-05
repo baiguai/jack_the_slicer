@@ -11,6 +11,7 @@
 #include "audio.hpp"
 #include "config.hpp"
 #include "file_browser.hpp"
+#include "help_dialog.hpp"
 
 namespace jack {
 namespace {
@@ -43,6 +44,7 @@ int RunApp() {
   std::string loaded_file;
   fs::path last_directory = config.last_directory;
   bool show_modal = false;
+  bool show_help = false;
   jack::WavPlayer player;
 
   const auto on_open = [&](const fs::path& path) {
@@ -60,6 +62,7 @@ int RunApp() {
   const auto on_cancel = [&]() { show_modal = false; };
 
   auto file_browser = ftxui::Make<FileBrowser>(on_open, on_cancel);
+  auto help = ftxui::Make<HelpDialog>([&]() { show_help = false; });
 
   auto main_screen = ftxui::Renderer([&] {
     player.Poll();
@@ -98,6 +101,10 @@ int RunApp() {
       player.Play(loaded_file, event == ftxui::Event::Character('P'));
       return true;
     }
+    if (!show_modal && event == ftxui::Event::Character('?')) {
+      show_help = true;
+      return true;
+    }
     if (!show_modal && event == ftxui::Event::Escape && player.IsPlaying()) {
       player.Stop();
       return true;
@@ -112,6 +119,7 @@ int RunApp() {
 
   auto app = ftxui::Modal(ftxui::Make<FocusableHost>(main_caught), file_browser,
                           &show_modal);
+  app = ftxui::Modal(app, help, &show_help);
 
   screen.Loop(app);
   return 0;
