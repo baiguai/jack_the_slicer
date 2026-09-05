@@ -9,6 +9,7 @@ add_executable(App
     src/main.cpp
     src/config.cpp
     src/file_browser.cpp
+    src/audio.cpp
 )
 
 include(FetchContent)
@@ -38,6 +39,12 @@ endif()
 if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
     target_compile_options(App PRIVATE -Wall -Wextra -O2)
 endif()
+
+# Vendored miniaudio (single-header audio playback). No external library needed:
+# on Linux it runtime-loads ALSA/PulseAudio, on Windows it runtime-loads WASAPI.
+target_include_directories(App PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/third_party/miniaudio
+)
 
 # Set output directory
 set_target_properties(App PROPERTIES

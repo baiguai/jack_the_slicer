@@ -113,12 +113,25 @@ else
     echo "  To fetch it now:  ./setup.sh --prefetch"
 fi
 
-# --- Windows cross-build (optional) ----------------------------------------
+# --- MinGW-w64 cross-compiler (optional) -----------------------------------
 if command -v x86_64-w64-mingw32-gcc >/dev/null 2>&1; then
     echo "[OK] MinGW-w64 cross-compiler (Windows builds supported)"
 else
     echo "MinGW-w64 not found - Windows builds (./build-windows.sh) will fail."
     echo "  Install it with:  sudo apt install -y mingw-w64"
+fi
+
+# --- Audio playback (vendored miniaudio.h) ---------------------------------
+# Playback uses third_party/miniaudio/miniaudio.h (a single header, committed
+# to this repo), so there is NOTHING to install to build. It loads the audio
+# backend at runtime: PulseAudio/ALSA on Linux, WASAPI on Windows.
+echo "Audio: miniaudio is vendored (no system package needed to build)."
+if command -v pactl >/dev/null 2>&1 && pactl info >/dev/null 2>&1; then
+    echo "[OK] PulseAudio server detected (runtime audio backend)"
+else
+    echo "WARNING: no running PulseAudio server found - playback will fall back"
+    echo "  to ALSA if available, or beep-free silence otherwise. To install:"
+    echo "  sudo apt install -y pulseaudio"
 fi
 
 echo ""

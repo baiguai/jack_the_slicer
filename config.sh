@@ -8,6 +8,7 @@ SOURCES=(
     "src/main.cpp"
     "src/config.cpp"
     "src/file_browser.cpp"
+    "src/audio.cpp"
 )
 
 LIBS=(
@@ -20,4 +21,5 @@ HEADERS=(
     "src/main.hpp"
     "src/config.hpp"
     "src/file_browser.hpp"
+    "src/audio.hpp"
 )
