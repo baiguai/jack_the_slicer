@@ -15,9 +15,10 @@ def spawn():
                          stderr=slave, close_fds=True)
     os.close(slave)
     time.sleep(1.2)
-    state = {'buf': b''}
+    state = {'buf': b'', 'last': b''}
     def drain(t=1.2, stop=None):
         end = time.time() + t
+        out = b''
         while time.time() < end:
             r, _, _ = select.select([master], [], [], 0.1)
             if r:
@@ -28,8 +29,10 @@ def spawn():
                 if not c:
                     break
                 state['buf'] += c
+                out += c
                 if stop and stop.encode() in state['buf']:
                     break
+        state['last'] = out
         return state['buf']
     drain(1.0)
     return master, p, drain
@@ -43,7 +46,9 @@ def quit_app(master, p):
     return rc is not None
 
 cfg = os.path.expanduser('~/.config/jack_the_slicer/config')
-os.system(f'rm -f "{cfg}"')
+os.makedirs(os.path.dirname(cfg), exist_ok=True)
+with open(cfg, 'w') as f:                 # open the dialog in the test dir
+    f.write('/tmp/jts_test')
 
 os.makedirs('/tmp/jts_test', exist_ok=True)
 with open('/tmp/jts_test/foo.wav', 'wb') as f:
@@ -54,18 +59,28 @@ master, p, buf = spawn()
 os.write(master, b'\x0f')                 # Ctrl+O
 buf()
 time.sleep(0.3)
-os.write(master, b'/tmp/jts_test/fo')     # partial path
+os.write(master, b'fo')                   # append to the kept full path (/tmp/jts_test/fo)
 time.sleep(0.4)
 buf(0.8)
-os.write(master, b'\t')                   # Tab -> completes to foo.wav
+os.write(master, b'\t')                   # Tab -> completes to foo.wav, cursor to end
 time.sleep(0.4)
 buf(0.8)
+os.write(master, b'X')                    # cursor is at end: appends, not mid-insert
+time.sleep(0.4)
+b = buf(0.8)
+check('Tab puts cursor at end (typed char appends)', b'/tmp/jts_test/foo.wavX' in b)
+os.write(master, b'\x7f')                 # Backspace -> remove the X
+time.sleep(0.4)
+b = buf(0.8)
+check('backspace removes from end', b'foo.wavX' not in b.split(b'\n').pop())
 os.write(master, b'\r')                   # Enter -> load
 time.sleep(0.8)
 buf(1.2, 'Loaded')
 base = buf()
 check('modal opens on Ctrl+O', b'Path:' in base)
-check('loaded path shown', b'/tmp/jts_test/foo.wav' in base)
+check('path bar kept current dir on open', b'/tmp/jts_test/' in base)
+check('loaded path shown (full path kept while typing)',
+      b'/tmp/jts_test/foo.wav' in base)
 check('q exits after load (modal closed)', quit_app(master, p))
 os.close(master)
 check('parent dir saved to config',

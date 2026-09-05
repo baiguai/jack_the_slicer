@@ -152,19 +152,15 @@ bool FileBrowser::OnEvent(ftxui::Event event) {
   }
   if (event.is_character()) {
     const char first = event.character().empty() ? 0 : event.character()[0];
-    if (static_cast<unsigned char>(first) >= 0x20) {
-      if (!focus_input_) {
-        focus_input_ = true;
-      }
-      if (IsCurrentDirectory()) {
-        path_text_.clear();
-      }
+    if (static_cast<unsigned char>(first) >= 0x20 && !focus_input_) {
+      focus_input_ = true;
     }
     return input_->OnEvent(event);
   }
   if (event == ftxui::Event::Tab) {
     if (focus_input_) {
       if (!IsCurrentDirectory() && Complete()) {
+        input_->OnEvent(ftxui::Event::End);
         return true;
       }
       focus_input_ = false;
@@ -265,6 +261,7 @@ void FileBrowser::EnterDirectory(const fs::path& directory) {
   status_.clear();
   Refresh();
   SetPathText(current_dir_);
+  input_->OnEvent(ftxui::Event::End);
 }
 
 void FileBrowser::SetPathText(const fs::path& directory) {
