@@ -22,6 +22,8 @@ class HelpDialog : public ftxui::ComponentBase {
 
  private:
   OnClose on_close_;
+  int scroll_ = 0;
+  int max_scroll_ = 0;
 };
 
 }  // namespace jack
