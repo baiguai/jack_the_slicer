@@ -5,6 +5,9 @@ cd "$(dirname "$0")/.."
 
 cmake --build build >/dev/null || { echo "ERROR: build failed"; exit 1; }
 
+# reset generated slice fixtures before the suite
+rm -rf /tmp/jts_test/sliced
+
 for test in tests/test_*.py; do
     echo "== $test =="
     python3 "$test"

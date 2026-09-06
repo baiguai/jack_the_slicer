@@ -1,6 +1,9 @@
 #include "main.hpp"
 
 #include <algorithm>
+#include <chrono>
+#include <cstdio>
+#include <ctime>
 #include <filesystem>
 #include <random>
 #include <string>
@@ -25,6 +28,26 @@ namespace fs = std::filesystem;
 const ftxui::Event kCtrlO = ftxui::Event::Special("\x0F");
 // Ctrl+R is transmitted as ASCII 0x12 (DC2).
 const ftxui::Event kCtrlR = ftxui::Event::Special("\x12");
+// Ctrl+A applies the slice grid: transmitted as ASCII 0x01 (SOH).
+const ftxui::Event kApplyKey = ftxui::Event::Special("\x01");
+// Ctrl+X is transmitted as ASCII 0x18 (CAN).
+const ftxui::Event kCtrlX = ftxui::Event::Special("\x18");
+
+// Compact timestamp used in sliced output names: YYYYMMDD-HHMMSS-mmm.
+std::string Timestamp() {
+  const auto now = std::chrono::system_clock::now();
+  const auto ms =
+      std::chrono::duration_cast<std::chrono::milliseconds>(
+          now.time_since_epoch()) %
+      1000;
+  const std::time_t t = std::chrono::system_clock::to_time_t(now);
+  char base[32];
+  std::strftime(base, sizeof(base), "%Y%m%d-%H%M%S", std::localtime(&t));
+  char result[40];
+  std::snprintf(result, sizeof(result), "%s-%03ld", base,
+                static_cast<long>(ms.count()));
+  return result;
+}
 
 // A trivial focusable wrapper. Container::Tab (used by ftxui::Modal) only
 // routes events to its active child when that child reports Focusable()==true,
@@ -47,7 +70,8 @@ int RunApp() {
 
   auto screen = ftxui::ScreenInteractive::Fullscreen();
 
-  std::string loaded_file;
+  std::string loaded_file;   // the .wav the user opened (the slice source)
+  std::string active_file;   // what p/P plays (a slice, or the original)
   fs::path last_directory = config.last_directory;
   bool show_modal = false;
   bool show_help = false;
@@ -66,6 +90,7 @@ int RunApp() {
 
   const auto on_open = [&](const fs::path& path) {
     loaded_file = path.string();
+    active_file = loaded_file;
     last_directory = path.parent_path();
     if (last_directory.empty()) {
       last_directory = path.root_path();
@@ -164,7 +189,7 @@ int RunApp() {
       lines.push_back(ftxui::text("  (none)") | ftxui::dim);
     } else {
       lines.push_back(
-          ftxui::text("  " + loaded_file) |
+          ftxui::text("  " + active_file) |
           ftxui::color(ftxui::Color::Green));
     }
     if (player.IsPlaying()) {
@@ -247,7 +272,25 @@ int RunApp() {
     if (!show_modal && !loaded_file.empty() &&
         (event == ftxui::Event::Character('p') ||
          event == ftxui::Event::Character('P'))) {
-      player.Play(loaded_file, event == ftxui::Event::Character('P'));
+      player.Play(active_file, event == ftxui::Event::Character('P'));
+      return true;
+    }
+    if (!show_modal && event == kApplyKey && !loaded_file.empty() &&
+        column_visible()) {
+      const fs::path src = loaded_file;
+      const fs::path dir = src.parent_path() / "sliced";
+      std::error_code ec;
+      fs::create_directories(dir, ec);
+      const fs::path dst =
+          dir / (src.stem().string() + "_" + Timestamp() + ".wav");
+      if (jack::SliceWav(src, dst, total_slices)) {
+        active_file = dst.string();
+      }
+      return true;
+    }
+    if (!show_modal && event == kCtrlX && !loaded_file.empty()) {
+      active_file = loaded_file;
+      player.Stop();
       return true;
     }
     if (!show_modal && event == ftxui::Event::Character('?')) {

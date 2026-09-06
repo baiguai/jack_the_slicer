@@ -39,6 +39,14 @@ class WavPlayer {
   std::unique_ptr<Impl> impl_;
 };
 
+// Slices |src| into |chunks| equal-length pieces, stitches them back together
+// in their original order, and writes the result as a new 16-bit PCM .wav at
+// |dst|. (Per-slice effects that reorder or transform the pieces are applied in
+// a later step.) Returns false if the source cannot be decoded or the write
+// fails.
+bool SliceWav(const std::filesystem::path& src, const std::filesystem::path& dst,
+              int chunks);
+
 }  // namespace jack
 
 #endif  // JACK_THE_SLICER_AUDIO_HPP
