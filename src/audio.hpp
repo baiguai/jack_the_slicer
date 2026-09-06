@@ -56,10 +56,12 @@ enum SliceEffect : int {
 // PCM .wav at |dst|.
 //
 // |effects| holds one effect code per piece. A piece set to |kEffectShuffle| is
-// replaced by the data of a uniformly random piece (which may be itself); pieces
-// with any other code keep their original data for now. When |effects| is empty
-// or shorter than |chunks|, the missing pieces are treated as |kEffectNone|.
-// Returns false if the source cannot be decoded or the write fails.
+// replaced by the data of a uniformly random piece (which may be itself); a
+// piece set to |kEffectReverse| has its frames played back in reverse order.
+// Pieces with any other code keep their original data for now. When |effects|
+// is empty or shorter than |chunks|, the missing pieces are treated as
+// |kEffectNone|. Returns false if the source cannot be decoded or the write
+// fails.
 bool SliceWav(const std::filesystem::path& src, const std::filesystem::path& dst,
               int chunks, const std::vector<int>& effects, std::uint32_t seed);
 

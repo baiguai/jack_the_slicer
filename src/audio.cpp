@@ -297,13 +297,25 @@ bool SliceWav(const std::filesystem::path& src, const std::filesystem::path& dst
   std::vector<std::uint8_t> out;
   out.reserve(chunk_bytes * static_cast<size_t>(chunks));
   for (int chunk = 0; chunk < chunks; ++chunk) {
+    const int effect = effect_of(chunk);
     int source = chunk;
-    if (effect_of(chunk) == kEffectShuffle && chunks > 1) {
+    if (effect == kEffectShuffle && chunks > 1) {
       source = static_cast<int>(rng() % static_cast<unsigned>(chunks));
     }
     const size_t offset = static_cast<size_t>(source) * chunk_bytes;
-    out.insert(out.end(), decoded.bytes.begin() + offset,
-               decoded.bytes.begin() + offset + chunk_bytes);
+    if (effect == kEffectReverse) {
+      // Copy the frames in reverse order, keeping each frame's bytes intact.
+      for (size_t f = 0; f < frames_per_chunk; ++f) {
+        const size_t frame_offset =
+            (frames_per_chunk - 1 - f) * bytes_per_frame;
+        out.insert(out.end(), decoded.bytes.begin() + offset + frame_offset,
+                   decoded.bytes.begin() + offset + frame_offset +
+                       bytes_per_frame);
+      }
+    } else {
+      out.insert(out.end(), decoded.bytes.begin() + offset,
+                 decoded.bytes.begin() + offset + chunk_bytes);
+    }
   }
 
   return WriteWavPcm(dst, decoded.channels, decoded.sample_rate, out);

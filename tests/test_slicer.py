@@ -144,6 +144,86 @@ if rc is None:
 check('quit works', rc is not None)
 os.close(master)
 
+# --- Second session: Reverse is applied per-slice at the frame level. ---
+existing = len(slicer_files())
+master2, slave2 = pty.openpty()
+fcntl.ioctl(master2, termios.TIOCSWINSZ, struct.pack('HHHH', 40, 80, 0, 0))
+p2 = subprocess.Popen(['./build/bin/App'], stdin=slave2, stdout=slave2,
+                      stderr=slave2, close_fds=True)
+os.close(slave2)
+time.sleep(1.2)
+state2 = {'buf': b'', 'last': b''}
+
+def drain2(t=1.0, stop=None):
+    end = time.time() + t
+    out = b''
+    while time.time() < end:
+        r, _, _ = select.select([master2], [], [], 0.1)
+        if r:
+            try:
+                c = os.read(master2, 65536)
+            except OSError:
+                break
+            if not c:
+                break
+            state2['buf'] += c
+            out += c
+            if stop and stop.encode() in out:
+                break
+    state2['last'] = out
+    return state2['buf']
+
+drain2(0.8)
+
+# Load ramp.wav (the sliced/ dir from session 1 shifts the listing: skip it).
+os.write(master2, b'\x0f'); drain2(1.0, 'Files:')
+time.sleep(0.2); os.write(master2, b'\t'); time.sleep(0.3); drain2(0.5)
+os.write(master2, b'\x1b[B'); time.sleep(0.3); drain2(0.5)   # sliced/
+os.write(master2, b'\x1b[B'); time.sleep(0.3); drain2(0.5)   # foo.wav
+os.write(master2, b'\x1b[B'); time.sleep(0.3); drain2(0.5)   # ramp.wav
+os.write(master2, b'\r'); time.sleep(0.8); drain2(1.2)
+
+# 1 bar, 1/2 slices -> 2 slices.
+os.write(master2, b'\r'); time.sleep(0.4); drain2(0.8)     # bars: select 1 bar
+os.write(master2, b'\x1b[B'); time.sleep(0.3); drain2(0.5)  # down -> slice length
+os.write(master2, b'\x1b[C'); time.sleep(0.3); drain2(0.5)  # right -> 1/2
+os.write(master2, b'\r'); time.sleep(0.5); drain2(1.0)
+check('2 slices configured (reverse session)', b'Slices: 2' in state2['last'])
+
+# Down into the slice column; slice 1 -> Reverse, slice 2 -> None.
+os.write(master2, b'\x1b[B'); time.sleep(0.3); drain2(0.6)
+os.write(master2, b'\r'); time.sleep(0.4); drain2(1.0)     # open effect menu
+os.write(master2, b'\x1b[B'); time.sleep(0.3); drain2(0.6)  # -> Reverse
+os.write(master2, b'\x1b[B'); time.sleep(0.3); drain2(0.6)  # -> Stretch
+os.write(master2, b'\x1b[A'); time.sleep(0.3); drain2(0.6)  # back to Reverse
+os.write(master2, b'\r'); time.sleep(0.4); drain2(1.0)
+check('slice 1 set to Reverse', b'     1  Reverse' in state2['last'])
+os.write(master2, b'\x1b[B'); time.sleep(0.3); drain2(0.6)  # down -> slice 2
+os.write(master2, b'\r'); time.sleep(0.4); drain2(1.0)     # open effect menu
+os.write(master2, b'\x1b[A'); time.sleep(0.3); drain2(0.6)  # up -> None
+os.write(master2, b'\r'); time.sleep(0.4); drain2(1.0)
+check('slice 2 set to None', b'     2  None' in state2['last'])
+
+# Apply and verify chunk 1 is reversed, chunk 2 untouched.
+os.write(master2, b'\x01'); time.sleep(1.5); drain2(1.5)
+files = slicer_files()
+check('reverse-session slice created', len(files) == existing + 1)
+src_pcm = open('/tmp/jts_test/ramp.wav', 'rb').read()[44:]
+out_pcm = open(files[-1], 'rb').read()[44:]
+c0, c1 = src_pcm[:8000], src_pcm[8000:16000]
+rev0 = b''.join(c0[i:i + 2] for i in range(len(c0) - 2, -1, -2))
+check('first chunk reversed frame-by-frame', out_pcm[:8000] == rev0)
+check('second chunk kept in original order', out_pcm[8000:16000] == c1)
+check('output differs from source', out_pcm != src_pcm)
+
+os.write(master2, b'q')
+time.sleep(1.0)
+rc2 = p2.poll()
+if rc2 is None:
+    p2.kill(); p2.wait()
+check('reverse session quits', rc2 is not None)
+os.close(master2)
+
 if FAILURES:
     print(f"\nFAILED: {FAILURES}")
     sys.exit(1)
