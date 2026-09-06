@@ -10,6 +10,7 @@ add_executable(App
     src/config.cpp
     src/file_browser.cpp
     src/audio.cpp
+    src/help_dialog.cpp
 )
 
 include(FetchContent)
