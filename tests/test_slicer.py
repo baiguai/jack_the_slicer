@@ -224,6 +224,89 @@ if rc2 is None:
 check('reverse session quits', rc2 is not None)
 os.close(master2)
 
+# --- Third session: Stretch plays the first half of a slice, each frame
+# --- held twice, filling the full chunk duration. ---
+existing = len(slicer_files())
+master3, slave3 = pty.openpty()
+fcntl.ioctl(master3, termios.TIOCSWINSZ, struct.pack('HHHH', 40, 80, 0, 0))
+p3 = subprocess.Popen(['./build/bin/App'], stdin=slave3, stdout=slave3,
+                      stderr=slave3, close_fds=True)
+os.close(slave3)
+time.sleep(1.2)
+state3 = {'buf': b'', 'last': b''}
+
+def drain3(t=1.0, stop=None):
+    end = time.time() + t
+    out = b''
+    while time.time() < end:
+        r, _, _ = select.select([master3], [], [], 0.1)
+        if r:
+            try:
+                c = os.read(master3, 65536)
+            except OSError:
+                break
+            if not c:
+                break
+            state3['buf'] += c
+            out += c
+            if stop and stop.encode() in out:
+                break
+    state3['last'] = out
+    return state3['buf']
+
+drain3(0.8)
+
+# Load ramp.wav (sliced/ still shifts the listing).
+os.write(master3, b'\x0f'); drain3(1.0, 'Files:')
+time.sleep(0.2); os.write(master3, b'\t'); time.sleep(0.3); drain3(0.5)
+os.write(master3, b'\x1b[B'); time.sleep(0.3); drain3(0.5)
+os.write(master3, b'\x1b[B'); time.sleep(0.3); drain3(0.5)
+os.write(master3, b'\x1b[B'); time.sleep(0.3); drain3(0.5)
+os.write(master3, b'\r'); time.sleep(0.8); drain3(1.2)
+
+# 1 bar, 1/2 slices -> 2 slices.
+os.write(master3, b'\r'); time.sleep(0.4); drain3(0.8)
+os.write(master3, b'\x1b[B'); time.sleep(0.3); drain3(0.5)
+os.write(master3, b'\x1b[C'); time.sleep(0.3); drain3(0.5)
+os.write(master3, b'\r'); time.sleep(0.5); drain3(1.0)
+check('2 slices configured (stretch session)', b'Slices: 2' in state3['last'])
+
+# Slice 1 -> Stretch, slice 2 -> None.
+os.write(master3, b'\x1b[B'); time.sleep(0.3); drain3(0.6)
+os.write(master3, b'\r'); time.sleep(0.4); drain3(1.0)     # open effect menu
+os.write(master3, b'\x1b[B'); time.sleep(0.3); drain3(0.6)  # -> Reverse
+os.write(master3, b'\x1b[B'); time.sleep(0.3); drain3(0.6)  # -> Stretch
+os.write(master3, b'\r'); time.sleep(0.4); drain3(1.0)
+check('slice 1 set to Stretch', b'     1  Stretch' in state3['last'])
+os.write(master3, b'\x1b[B'); time.sleep(0.3); drain3(0.6)  # down -> slice 2
+os.write(master3, b'\r'); time.sleep(0.4); drain3(1.0)     # open effect menu
+os.write(master3, b'\x1b[A'); time.sleep(0.3); drain3(0.6)  # up -> None
+os.write(master3, b'\r'); time.sleep(0.4); drain3(1.0)
+check('slice 2 set to None', b'     2  None' in state3['last'])
+
+# Apply and verify chunk 1 is the first half of the source, each frame twice.
+os.write(master3, b'\x01'); time.sleep(1.5); drain3(1.5)
+files = slicer_files()
+check('stretch-session slice created', len(files) == existing + 1)
+out_pcm = open(files[-1], 'rb').read()[44:]
+st0 = b''
+i = 0
+while i < 4000:                      # first 2000 frames = 4000 bytes of c0
+    frame = c0[i:i + 2]
+    st0 += frame + frame
+    i += 2
+check('first chunk is half-length stretched', out_pcm[:8000] == st0)
+check('second chunk kept in original order', out_pcm[8000:16000] == c1)
+check('output differs from source', out_pcm != src_pcm)
+
+os.write(master3, b'q')
+time.sleep(1.0)
+rc3 = p3.poll()
+if rc3 is None:
+    p3.kill(); p3.wait()
+check('stretch session quits', rc3 is not None)
+os.close(master3)
+
 if FAILURES:
     print(f"\nFAILED: {FAILURES}")
     sys.exit(1)

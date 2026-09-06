@@ -312,6 +312,26 @@ bool SliceWav(const std::filesystem::path& src, const std::filesystem::path& dst
                    decoded.bytes.begin() + offset + frame_offset +
                        bytes_per_frame);
       }
+    } else if (effect == kEffectStretch) {
+      // Stretch by playing the first half of the slice with each frame held
+      // twice, so the half-length content fills the full chunk duration.
+      const size_t half_frames = frames_per_chunk / 2;
+      for (size_t f = 0; f < half_frames; ++f) {
+        const size_t frame_offset = f * bytes_per_frame;
+        for (int rep = 0; rep < 2; ++rep) {
+          out.insert(out.end(), decoded.bytes.begin() + offset + frame_offset,
+                     decoded.bytes.begin() + offset + frame_offset +
+                         bytes_per_frame);
+        }
+      }
+      size_t emitted = half_frames * 2;
+      const size_t first_frame = 0;
+      while (emitted < frames_per_chunk) {
+        out.insert(out.end(), decoded.bytes.begin() + offset + first_frame,
+                   decoded.bytes.begin() + offset + first_frame +
+                       bytes_per_frame);
+        ++emitted;
+      }
     } else {
       out.insert(out.end(), decoded.bytes.begin() + offset,
                  decoded.bytes.begin() + offset + chunk_bytes);
