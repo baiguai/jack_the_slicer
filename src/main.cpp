@@ -275,15 +275,15 @@ int RunApp() {
       player.Play(active_file, event == ftxui::Event::Character('P'));
       return true;
     }
-    if (!show_modal && event == kApplyKey && !loaded_file.empty() &&
-        column_visible()) {
+    if (!show_modal && event == kApplyKey && !loaded_file.empty()) {
       const fs::path src = loaded_file;
       const fs::path dir = src.parent_path() / "sliced";
       std::error_code ec;
       fs::create_directories(dir, ec);
       const fs::path dst =
           dir / (src.stem().string() + "_" + Timestamp() + ".wav");
-      if (jack::SliceWav(src, dst, total_slices)) {
+      const int chunks = total_slices > 0 ? total_slices : 1;
+      if (jack::SliceWav(src, dst, chunks)) {
         active_file = dst.string();
       }
       return true;
@@ -410,15 +410,16 @@ int RunApp() {
       }
     }
     if (!show_modal && event == ftxui::Event::Escape && !loaded_file.empty()) {
+      if (player.IsPlaying()) {
+        player.Stop();
+        return true;
+      }
       if (active_row == 0) {
         bars_selected = -1;
       } else if (active_row == 1) {
         slice_selected = -1;
       }
       recompute_slices();
-      if (player.IsPlaying()) {
-        player.Stop();
-      }
       return true;
     }
     if (!show_modal && (event == ftxui::Event::Character('q') ||
