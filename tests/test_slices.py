@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """End-to-end PTY test: the slice column (row 3) with per-slice effects."""
-import fcntl, os, pty, termios, time, select, struct, subprocess, sys
+import fcntl, os, pty, re, termios, time, select, struct, subprocess, sys
 
 FAILURES = []
 
@@ -121,6 +121,21 @@ for _ in range(20):
         break
 check('back to first slice', focused_slice() == '1')
 check('top rows visible again at top', b'     6  Shuffle' in state['last'])
+
+# Ctrl+R re-randomizes every slice's effect.
+def slice_effects_on_screen():
+    s = re.sub(r'\x1b\[[0-9;]*m', '',
+               state['last'].decode('utf-8', 'replace'))
+    out = set()
+    for line in s.splitlines():
+        m = re.search(r'(\d+)\s+(None|Shuffle|Reverse|Stretch|Squish)', line)
+        if m:
+            out.add(m.group(2))
+    return out
+os.write(master, b'\x12'); time.sleep(0.5); drain(1.0)
+effects = slice_effects_on_screen()
+check('Ctrl+R re-randomizes slice effects',
+      any(e != 'Shuffle' for e in effects))
 
 os.write(master, b'q')
 time.sleep(1.0)

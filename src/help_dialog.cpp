@@ -48,6 +48,7 @@ const std::vector<BindingSection>& Sections() {
          {"Up / Down", "Choose an effect in the open menu"},
          {"Enter", "Apply the highlighted effect"},
          {"Esc", "Hide the menu, or clear a slice effect"},
+         {"Ctrl+R", "Re-randomize every slice effect"},
          {"Effects", "None, Shuffle, Reverse, Stretch, Squish"}}},
   };
   return sections;

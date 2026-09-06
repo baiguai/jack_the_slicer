@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <filesystem>
+#include <random>
 #include <string>
 #include <vector>
 
@@ -22,6 +23,8 @@ namespace fs = std::filesystem;
 
 // Ctrl+O is transmitted as ASCII 0x0F (SI) and arrives as a "special" event.
 const ftxui::Event kCtrlO = ftxui::Event::Special("\x0F");
+// Ctrl+R is transmitted as ASCII 0x12 (DC2).
+const ftxui::Event kCtrlR = ftxui::Event::Special("\x12");
 
 // A trivial focusable wrapper. Container::Tab (used by ftxui::Modal) only
 // routes events to its active child when that child reports Focusable()==true,
@@ -249,6 +252,15 @@ int RunApp() {
     }
     if (!show_modal && event == ftxui::Event::Character('?')) {
       show_help = true;
+      return true;
+    }
+    if (!show_modal && event == kCtrlR && column_visible()) {
+      static std::mt19937 rng(std::random_device{}());
+      std::uniform_int_distribution<int> dist(
+          0, static_cast<int>(kEffects.size()) - 1);
+      for (int& effect : slice_effects) {
+        effect = dist(rng);
+      }
       return true;
     }
     if (!show_modal && !loaded_file.empty()) {
