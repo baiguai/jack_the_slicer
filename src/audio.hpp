@@ -1,9 +1,11 @@
 #ifndef JACK_THE_SLICER_AUDIO_HPP
 #define JACK_THE_SLICER_AUDIO_HPP
 
+#include <cstdint>
 #include <filesystem>
 #include <memory>
 #include <string>
+#include <vector>
 
 namespace jack {
 
@@ -39,13 +41,27 @@ class WavPlayer {
   std::unique_ptr<Impl> impl_;
 };
 
-// Slices |src| into |chunks| equal-length pieces, stitches them back together
-// in their original order, and writes the result as a new 16-bit PCM .wav at
-// |dst|. (Per-slice effects that reorder or transform the pieces are applied in
-// a later step.) Returns false if the source cannot be decoded or the write
-// fails.
+// Per-slice effect codes. The numeric values match the option order in the
+// UI (see kEffects in main.cpp), so they can be passed straight through.
+enum SliceEffect : int {
+  kEffectNone = 0,
+  kEffectShuffle = 1,
+  kEffectReverse = 2,
+  kEffectStretch = 3,
+  kEffectSquish = 4,
+};
+
+// Slices |src| into |chunks| equal-length pieces, applies each piece's effect,
+// stitches the pieces back together, and writes the result as a new 16-bit
+// PCM .wav at |dst|.
+//
+// |effects| holds one effect code per piece. A piece set to |kEffectShuffle| is
+// replaced by the data of a uniformly random piece (which may be itself); pieces
+// with any other code keep their original data for now. When |effects| is empty
+// or shorter than |chunks|, the missing pieces are treated as |kEffectNone|.
+// Returns false if the source cannot be decoded or the write fails.
 bool SliceWav(const std::filesystem::path& src, const std::filesystem::path& dst,
-              int chunks);
+              int chunks, const std::vector<int>& effects, std::uint32_t seed);
 
 }  // namespace jack
 

@@ -283,7 +283,15 @@ int RunApp() {
       const fs::path dst =
           dir / (src.stem().string() + "_" + Timestamp() + ".wav");
       const int chunks = total_slices > 0 ? total_slices : 1;
-      if (jack::SliceWav(src, dst, chunks)) {
+      std::vector<int> effects(static_cast<size_t>(chunks),
+                               jack::kEffectNone);
+      for (int i = 0; i < chunks; ++i) {
+        if (i < static_cast<int>(slice_effects.size())) {
+          effects[static_cast<size_t>(i)] = slice_effects[i];
+        }
+      }
+      std::mt19937 rng(std::random_device{}());
+      if (jack::SliceWav(src, dst, chunks, effects, rng())) {
         active_file = dst.string();
       }
       return true;

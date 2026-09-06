@@ -9,6 +9,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <random>
 #include <vector>
 
 namespace jack {
@@ -266,7 +267,7 @@ const std::string& WavPlayer::CurrentFile() const {
 }
 
 bool SliceWav(const std::filesystem::path& src, const std::filesystem::path& dst,
-              int chunks) {
+              int chunks, const std::vector<int>& effects, std::uint32_t seed) {
   if (chunks <= 0) {
     return false;
   }
@@ -285,12 +286,22 @@ bool SliceWav(const std::filesystem::path& src, const std::filesystem::path& dst
   }
   const size_t chunk_bytes = frames_per_chunk * bytes_per_frame;
 
-  // Identity stitch for now; the per-slice effects will reorder/transform
-  // these pieces in a later step.
+  const auto effect_of = [&](int chunk) -> int {
+    if (chunk < 0 || chunk >= static_cast<int>(effects.size())) {
+      return kEffectNone;
+    }
+    return effects[static_cast<size_t>(chunk)];
+  };
+
+  std::mt19937 rng(seed);
   std::vector<std::uint8_t> out;
   out.reserve(chunk_bytes * static_cast<size_t>(chunks));
   for (int chunk = 0; chunk < chunks; ++chunk) {
-    const size_t offset = static_cast<size_t>(chunk) * chunk_bytes;
+    int source = chunk;
+    if (effect_of(chunk) == kEffectShuffle && chunks > 1) {
+      source = static_cast<int>(rng() % static_cast<unsigned>(chunks));
+    }
+    const size_t offset = static_cast<size_t>(source) * chunk_bytes;
     out.insert(out.end(), decoded.bytes.begin() + offset,
                decoded.bytes.begin() + offset + chunk_bytes);
   }
