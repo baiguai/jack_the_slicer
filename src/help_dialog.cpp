@@ -25,13 +25,15 @@ struct BindingSection {
 
 const std::vector<BindingSection>& Sections() {
   static const std::vector<BindingSection> sections = {
-      {"Main screen",
-       {{"?", "Show this help"},
-        {"Ctrl+O", "Open a .wav file"},
-        {"p", "Play the loaded .wav"},
-        {"P", "Play the loaded .wav on loop"},
-        {"Esc", "Stop playback"},
-        {"q", "Quit"}}},
+{"Main screen",
+        {{"?", "Show this help"},
+         {"Ctrl+O", "Open a .wav file"},
+         {"p", "Play the loaded .wav"},
+         {"P", "Play the loaded .wav on loop"},
+         {"Esc", "Stop playback"},
+         {"Ctrl+A", "Apply: slice & stitch into a /sliced .wav"},
+         {"Ctrl+X", "Play the original .wav again"},
+         {"q", "Quit"}}},
 {"Open-file dialog",
         {{"Tab", "Complete the path / focus the file list"},
          {"Up / Down", "Move through the file list"},
@@ -49,7 +51,7 @@ const std::vector<BindingSection>& Sections() {
          {"Enter", "Apply the highlighted effect"},
          {"Esc", "Hide the menu, or clear a slice effect"},
          {"Ctrl+R", "Re-randomize every slice effect"},
-         {"Effects", "None, Shuffle, Reverse, Stretch, Squish"}}},
+         {"Effects", "None, Shuffle, Reverse, Stretch, Squish, Stutter"}}},
   };
   return sections;
 }

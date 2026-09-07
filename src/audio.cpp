@@ -8,6 +8,8 @@
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
+#include <fstream>
+#include <random>
 #include <vector>
 
 namespace jack {
@@ -20,10 +22,13 @@ struct DecodedWav {
   ma_uint32 sample_rate = 0;
 };
 
-// Decodes |path| fully into memory as interleaved PCM frames.
-bool DecodeWav(const std::filesystem::path& path, DecodedWav& out) {
+// Decodes |path| fully into memory as interleaved PCM frames. When |channels|
+// is 0 the source's native channel count is preserved, otherwise the audio is
+// converted to that many channels.
+bool DecodeWav(const std::filesystem::path& path, DecodedWav& out,
+               ma_uint32 channels) {
   ma_decoder decoder;
-  ma_decoder_config config = ma_decoder_config_init(ma_format_s16, 2, 0);
+  ma_decoder_config config = ma_decoder_config_init(ma_format_s16, channels, 0);
   if (ma_decoder_init_file(path.string().c_str(), &config, &decoder) !=
       MA_SUCCESS) {
     return false;
@@ -55,6 +60,57 @@ bool DecodeWav(const std::filesystem::path& path, DecodedWav& out) {
   }
   out.bytes = std::move(buffer);
   return true;
+}
+
+// Writes interleaved 16-bit PCM samples as a standard RIFF/WAVE file.
+bool WriteWavPcm(const std::filesystem::path& path, ma_uint32 channels,
+                 ma_uint32 sample_rate,
+                 const std::vector<std::uint8_t>& pcm_bytes) {
+  const ma_uint32 data_size = static_cast<ma_uint32>(pcm_bytes.size());
+  const ma_uint32 byte_rate = sample_rate * channels *
+                              static_cast<ma_uint32>(sizeof(ma_int16));
+  const ma_uint16 block_align =
+      static_cast<ma_uint16>(channels * sizeof(ma_int16));
+  const size_t total_size = 44 + data_size;
+
+  std::vector<std::uint8_t> out;
+  out.reserve(44 + pcm_bytes.size());
+  auto put_bytes = [&](const char* bytes, size_t n) {
+    out.insert(out.end(), bytes, bytes + n);
+  };
+  auto put_u32 = [&](ma_uint32 v) {
+    out.push_back(v & 0xFF);
+    out.push_back((v >> 8) & 0xFF);
+    out.push_back((v >> 16) & 0xFF);
+    out.push_back((v >> 24) & 0xFF);
+  };
+  auto put_u16 = [&](ma_uint16 v) {
+    out.push_back(v & 0xFF);
+    out.push_back(v >> 8);
+  };
+
+  put_bytes("RIFF", 4);
+  put_u32(static_cast<ma_uint32>(total_size - 8));
+  put_bytes("WAVE", 4);
+  put_bytes("fmt ", 4);
+  put_u32(16);                                // fmt chunk size
+  put_u16(1);                                 // PCM
+  put_u16(static_cast<ma_uint16>(channels));
+  put_u32(sample_rate);
+  put_u32(byte_rate);
+  put_u16(block_align);
+  put_u16(16);                                // bits per sample
+  put_bytes("data", 4);
+  put_u32(data_size);
+  out.insert(out.end(), pcm_bytes.begin(), pcm_bytes.end());
+
+  std::ofstream file(path, std::ios::binary);
+  if (!file) {
+    return false;
+  }
+  file.write(reinterpret_cast<const char*>(out.data()),
+             static_cast<std::streamsize>(out.size()));
+  return file.good();
 }
 
 }  // namespace
@@ -136,7 +192,7 @@ bool WavPlayer::Play(const std::filesystem::path& path, bool loop) {
   Stop();
 
   DecodedWav decoded;
-  if (!DecodeWav(path, decoded)) {
+  if (!DecodeWav(path, decoded, 2)) {
     impl_->playing = false;
     impl_->finished = true;
     return false;
@@ -208,6 +264,129 @@ bool WavPlayer::IsLooping() const {
 
 const std::string& WavPlayer::CurrentFile() const {
   return impl_->current_file;
+}
+
+bool SliceWav(const std::filesystem::path& src, const std::filesystem::path& dst,
+              int chunks, const std::vector<int>& effects, std::uint32_t seed,
+              int slice_power) {
+  if (chunks <= 0) {
+    return false;
+  }
+
+  DecodedWav decoded;
+  if (!DecodeWav(src, decoded, 0)) {
+    return false;
+  }
+
+  const ma_uint32 bytes_per_frame =
+      ma_get_bytes_per_frame(decoded.format, decoded.channels);
+  const size_t total_frames = decoded.bytes.size() / bytes_per_frame;
+  const size_t frames_per_chunk = total_frames / static_cast<size_t>(chunks);
+  if (frames_per_chunk == 0) {
+    return false;
+  }
+  const size_t chunk_bytes = frames_per_chunk * bytes_per_frame;
+
+  const auto effect_of = [&](int chunk) -> int {
+    if (chunk < 0 || chunk >= static_cast<int>(effects.size())) {
+      return kEffectNone;
+    }
+    return effects[static_cast<size_t>(chunk)];
+  };
+
+  std::mt19937 rng(seed);
+  std::vector<std::uint8_t> out;
+  out.reserve(chunk_bytes * static_cast<size_t>(chunks));
+  for (int chunk = 0; chunk < chunks; ++chunk) {
+    const int effect = effect_of(chunk);
+    int source = chunk;
+    if (effect == kEffectShuffle && chunks > 1) {
+      source = static_cast<int>(rng() % static_cast<unsigned>(chunks));
+    }
+    const size_t offset = static_cast<size_t>(source) * chunk_bytes;
+    if (effect == kEffectReverse) {
+      // Copy the frames in reverse order, keeping each frame's bytes intact.
+      for (size_t f = 0; f < frames_per_chunk; ++f) {
+        const size_t frame_offset =
+            (frames_per_chunk - 1 - f) * bytes_per_frame;
+        out.insert(out.end(), decoded.bytes.begin() + offset + frame_offset,
+                   decoded.bytes.begin() + offset + frame_offset +
+                       bytes_per_frame);
+      }
+    } else if (effect == kEffectStretch) {
+      // Stretch by playing the first half of the slice with each frame held
+      // twice, so the half-length content fills the full chunk duration.
+      const size_t half_frames = frames_per_chunk / 2;
+      for (size_t f = 0; f < half_frames; ++f) {
+        const size_t frame_offset = f * bytes_per_frame;
+        for (int rep = 0; rep < 2; ++rep) {
+          out.insert(out.end(), decoded.bytes.begin() + offset + frame_offset,
+                     decoded.bytes.begin() + offset + frame_offset +
+                         bytes_per_frame);
+        }
+      }
+      size_t emitted = half_frames * 2;
+      const size_t first_frame = 0;
+      while (emitted < frames_per_chunk) {
+        out.insert(out.end(), decoded.bytes.begin() + offset + first_frame,
+                   decoded.bytes.begin() + offset + first_frame +
+                       bytes_per_frame);
+        ++emitted;
+      }
+    } else if (effect == kEffectSquish) {
+      // Remove every other frame, then repeat the kept frames twice so the
+      // chunk keeps its original length.
+      std::vector<std::uint8_t> squished;
+      squished.reserve((frames_per_chunk / 2 + 1) * bytes_per_frame);
+      for (size_t f = 0; f < frames_per_chunk; f += 2) {
+        const size_t frame_offset = f * bytes_per_frame;
+        squished.insert(squished.end(),
+                        decoded.bytes.begin() + offset + frame_offset,
+                        decoded.bytes.begin() + offset + frame_offset +
+                            bytes_per_frame);
+      }
+      const size_t kept_frames = squished.size() / bytes_per_frame;
+      size_t remain = frames_per_chunk;
+      for (int rep = 0; rep < 2 && remain > 0; ++rep) {
+        const size_t take = std::min(kept_frames, remain);
+        out.insert(out.end(), squished.begin(),
+                   squished.begin() + take * bytes_per_frame);
+        remain -= take;
+      }
+    } else if (effect == kEffectStutter) {
+      // Divide the chunk into finer pieces (granularity depends on the slice
+      // length setting), pick one at random, and repeat it for the whole chunk.
+      int subdiv = 32;
+      if (slice_power >= 1 && slice_power <= 2) {
+        subdiv = 16;
+      } else if (slice_power >= 3 && slice_power <= 4) {
+        subdiv = 4;
+      } else if (slice_power >= 5) {
+        subdiv = 2;
+      }
+      const size_t piece_bytes = (frames_per_chunk / subdiv) * bytes_per_frame;
+      if (piece_bytes == 0) {
+        out.insert(out.end(), decoded.bytes.begin() + offset,
+                   decoded.bytes.begin() + offset + chunk_bytes);
+      } else {
+        const int chosen = static_cast<int>(rng() % static_cast<unsigned>(subdiv));
+        const size_t chosen_offset =
+            offset + static_cast<size_t>(chosen) * piece_bytes;
+        size_t emitted = 0;
+        while (emitted < chunk_bytes) {
+          const size_t take = std::min(piece_bytes, chunk_bytes - emitted);
+          out.insert(out.end(), decoded.bytes.begin() + chosen_offset,
+                     decoded.bytes.begin() + chosen_offset + take);
+          emitted += take;
+        }
+      }
+    } else {
+      out.insert(out.end(), decoded.bytes.begin() + offset,
+                 decoded.bytes.begin() + offset + chunk_bytes);
+    }
+  }
+
+  return WriteWavPcm(dst, decoded.channels, decoded.sample_rate, out);
 }
 
 }  // namespace jack

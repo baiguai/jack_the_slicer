@@ -2,7 +2,7 @@
 
 # Central configuration - edit values here, all scripts pick them up
 
-APP_NAME="App"
+APP_NAME="JackTheSlicer"
 
 SOURCES=(
     "src/main.cpp"
