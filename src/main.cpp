@@ -110,7 +110,7 @@ int RunApp() {
   const std::vector<std::string> kSliceOptions = {"1", "2", "4", "8",
                                                   "16", "32", "64"};
   const std::vector<std::string> kEffects = {"None", "Shuffle", "Reverse",
-                                             "Stretch", "Squish"};
+                                             "Stretch", "Squish", "Stutter"};
   const auto column_visible = [&]() {
     return bars_selected >= 0 && slice_selected >= 0;
   };
@@ -291,7 +291,7 @@ int RunApp() {
         }
       }
       std::mt19937 rng(std::random_device{}());
-      if (jack::SliceWav(src, dst, chunks, effects, rng())) {
+      if (jack::SliceWav(src, dst, chunks, effects, rng(), slice_selected)) {
         active_file = dst.string();
       }
       return true;
@@ -317,11 +317,11 @@ int RunApp() {
     if (!show_modal && !loaded_file.empty()) {
       if (dropdown_open) {
         if (event == ftxui::Event::ArrowUp) {
-          dropdown_sel = (dropdown_sel + 4) % 5;
+          dropdown_sel = (dropdown_sel + 4) % 6;
           return true;
         }
         if (event == ftxui::Event::ArrowDown) {
-          dropdown_sel = (dropdown_sel + 1) % 5;
+          dropdown_sel = (dropdown_sel + 1) % 6;
           return true;
         }
         if (event == ftxui::Event::Return) {

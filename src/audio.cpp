@@ -267,7 +267,8 @@ const std::string& WavPlayer::CurrentFile() const {
 }
 
 bool SliceWav(const std::filesystem::path& src, const std::filesystem::path& dst,
-              int chunks, const std::vector<int>& effects, std::uint32_t seed) {
+              int chunks, const std::vector<int>& effects, std::uint32_t seed,
+              int slice_power) {
   if (chunks <= 0) {
     return false;
   }
@@ -331,6 +332,53 @@ bool SliceWav(const std::filesystem::path& src, const std::filesystem::path& dst
                    decoded.bytes.begin() + offset + first_frame +
                        bytes_per_frame);
         ++emitted;
+      }
+    } else if (effect == kEffectSquish) {
+      // Remove every other frame, then repeat the kept frames twice so the
+      // chunk keeps its original length.
+      std::vector<std::uint8_t> squished;
+      squished.reserve((frames_per_chunk / 2 + 1) * bytes_per_frame);
+      for (size_t f = 0; f < frames_per_chunk; f += 2) {
+        const size_t frame_offset = f * bytes_per_frame;
+        squished.insert(squished.end(),
+                        decoded.bytes.begin() + offset + frame_offset,
+                        decoded.bytes.begin() + offset + frame_offset +
+                            bytes_per_frame);
+      }
+      const size_t kept_frames = squished.size() / bytes_per_frame;
+      size_t remain = frames_per_chunk;
+      for (int rep = 0; rep < 2 && remain > 0; ++rep) {
+        const size_t take = std::min(kept_frames, remain);
+        out.insert(out.end(), squished.begin(),
+                   squished.begin() + take * bytes_per_frame);
+        remain -= take;
+      }
+    } else if (effect == kEffectStutter) {
+      // Divide the chunk into finer pieces (granularity depends on the slice
+      // length setting), pick one at random, and repeat it for the whole chunk.
+      int subdiv = 32;
+      if (slice_power >= 1 && slice_power <= 2) {
+        subdiv = 16;
+      } else if (slice_power >= 3 && slice_power <= 4) {
+        subdiv = 4;
+      } else if (slice_power >= 5) {
+        subdiv = 2;
+      }
+      const size_t piece_bytes = (frames_per_chunk / subdiv) * bytes_per_frame;
+      if (piece_bytes == 0) {
+        out.insert(out.end(), decoded.bytes.begin() + offset,
+                   decoded.bytes.begin() + offset + chunk_bytes);
+      } else {
+        const int chosen = static_cast<int>(rng() % static_cast<unsigned>(subdiv));
+        const size_t chosen_offset =
+            offset + static_cast<size_t>(chosen) * piece_bytes;
+        size_t emitted = 0;
+        while (emitted < chunk_bytes) {
+          const size_t take = std::min(piece_bytes, chunk_bytes - emitted);
+          out.insert(out.end(), decoded.bytes.begin() + chosen_offset,
+                     decoded.bytes.begin() + chosen_offset + take);
+          emitted += take;
+        }
       }
     } else {
       out.insert(out.end(), decoded.bytes.begin() + offset,

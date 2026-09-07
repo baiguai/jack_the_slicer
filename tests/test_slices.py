@@ -71,7 +71,7 @@ os.write(master, b'\x1b[B'); time.sleep(0.3); drain(0.5)
 os.write(master, b'\x1b[B'); time.sleep(0.3); drain(0.5)
 os.write(master, b'\r'); time.sleep(0.4); drain(1.0)
 check('effect menu opens on Enter', b'Shuffle' in state['last'])
-for effect in [b'None', b'Shuffle', b'Reverse', b'Stretch', b'Squish']:
+for effect in [b'None', b'Shuffle', b'Reverse', b'Stretch', b'Squish', b'Stutter']:
     check(f'effect listed: {effect.decode()}', effect in state['last'])
 check('Shuffle is highlighted first', b'> Shuffle' in state['last'])
 check('slice still defaults to Shuffle', b'     2  Shuffle' in state['last'])
@@ -81,11 +81,9 @@ os.write(master, b'\x1b'); time.sleep(0.4); drain(1.0)
 check('Esc closes the menu without applying', b'> Shuffle' not in state['last'])
 check('slice unchanged after cancel', b'     2  Shuffle' in state['last'])
 
-# Reopen, choose Reverse (move down twice), apply.
+# Reopen, choose Reverse (down once from the default Shuffle), apply.
 os.write(master, b'\r'); time.sleep(0.4); drain(1.0)
-os.write(master, b'\x1b[B'); time.sleep(0.3); drain(0.6)   # -> Reverse
-os.write(master, b'\x1b[B'); time.sleep(0.3); drain(0.6)   # -> Stretch
-os.write(master, b'\x1b[A'); time.sleep(0.3); drain(0.6)   # back up to Reverse
+os.write(master, b'\x1b[B'); time.sleep(0.3); drain(0.6)   # Shuffle -> Reverse
 os.write(master, b'\r'); time.sleep(0.4); drain(1.0)
 check('Enter applies the highlighted effect', b'     2  Reverse' in state['last'])
 check('no menu remnant', b'> Reverse' not in state['last'])
@@ -128,7 +126,7 @@ def slice_effects_on_screen():
                state['last'].decode('utf-8', 'replace'))
     out = set()
     for line in s.splitlines():
-        m = re.search(r'(\d+)\s+(None|Shuffle|Reverse|Stretch|Squish)', line)
+        m = re.search(r'(\d+)\s+(None|Shuffle|Reverse|Stretch|Squish|Stutter)', line)
         if m:
             out.add(m.group(2))
     return out

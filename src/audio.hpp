@@ -49,6 +49,7 @@ enum SliceEffect : int {
   kEffectReverse = 2,
   kEffectStretch = 3,
   kEffectSquish = 4,
+  kEffectStutter = 5,
 };
 
 // Slices |src| into |chunks| equal-length pieces, applies each piece's effect,
@@ -59,12 +60,18 @@ enum SliceEffect : int {
 // replaced by the data of a uniformly random piece (which may be itself); a
 // piece set to |kEffectReverse| has its frames played back in reverse order; a
 // piece set to |kEffectStretch| plays its first half with each frame held
-// twice, stretching that material to fill the full piece duration. Pieces with
-// any other code keep their original data for now. When |effects| is empty or
-// shorter than |chunks|, the missing pieces are treated as |kEffectNone|.
-// Returns false if the source cannot be decoded or the write fails.
+// twice, stretching that material to fill the full piece duration; a piece set
+// to |kEffectSquish| drops every other frame and repeats the kept frames twice,
+// keeping the piece length while halving the material. A piece set to
+// |kEffectStutter| picks one random sub-piece and repeats it for the whole
+// chunk; the sub-piece granularity is chosen from |slice_power| (the exponent
+// of the 1/1..1/64 slice length setting used in the UI). Pieces with any other
+// code keep their original data for now. When |effects| is empty or shorter
+// than |chunks|, the missing pieces are treated as |kEffectNone|. Returns false
+// if the source cannot be decoded or the write fails.
 bool SliceWav(const std::filesystem::path& src, const std::filesystem::path& dst,
-              int chunks, const std::vector<int>& effects, std::uint32_t seed);
+              int chunks, const std::vector<int>& effects, std::uint32_t seed,
+              int slice_power);
 
 }  // namespace jack
 

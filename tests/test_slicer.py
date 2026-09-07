@@ -193,14 +193,13 @@ check('2 slices configured (reverse session)', b'Slices: 2' in state2['last'])
 # Down into the slice column; slice 1 -> Reverse, slice 2 -> None.
 os.write(master2, b'\x1b[B'); time.sleep(0.3); drain2(0.6)
 os.write(master2, b'\r'); time.sleep(0.4); drain2(1.0)     # open effect menu
-os.write(master2, b'\x1b[B'); time.sleep(0.3); drain2(0.6)  # -> Reverse
-os.write(master2, b'\x1b[B'); time.sleep(0.3); drain2(0.6)  # -> Stretch
-os.write(master2, b'\x1b[A'); time.sleep(0.3); drain2(0.6)  # back to Reverse
+os.write(master2, b'\x1b[B'); time.sleep(0.3); drain2(0.6)  # Shuffle -> Reverse
 os.write(master2, b'\r'); time.sleep(0.4); drain2(1.0)
 check('slice 1 set to Reverse', b'     1  Reverse' in state2['last'])
 os.write(master2, b'\x1b[B'); time.sleep(0.3); drain2(0.6)  # down -> slice 2
 os.write(master2, b'\r'); time.sleep(0.4); drain2(1.0)     # open effect menu
-os.write(master2, b'\x1b[A'); time.sleep(0.3); drain2(0.6)  # up -> None
+for _ in range(5):
+    os.write(master2, b'\x1b[B'); time.sleep(0.2); drain2(0.4)  # wrap to None
 os.write(master2, b'\r'); time.sleep(0.4); drain2(1.0)
 check('slice 2 set to None', b'     2  None' in state2['last'])
 
@@ -274,13 +273,14 @@ check('2 slices configured (stretch session)', b'Slices: 2' in state3['last'])
 # Slice 1 -> Stretch, slice 2 -> None.
 os.write(master3, b'\x1b[B'); time.sleep(0.3); drain3(0.6)
 os.write(master3, b'\r'); time.sleep(0.4); drain3(1.0)     # open effect menu
-os.write(master3, b'\x1b[B'); time.sleep(0.3); drain3(0.6)  # -> Reverse
+os.write(master3, b'\x1b[B'); time.sleep(0.3); drain3(0.6)  # Shuffle -> Reverse
 os.write(master3, b'\x1b[B'); time.sleep(0.3); drain3(0.6)  # -> Stretch
 os.write(master3, b'\r'); time.sleep(0.4); drain3(1.0)
 check('slice 1 set to Stretch', b'     1  Stretch' in state3['last'])
 os.write(master3, b'\x1b[B'); time.sleep(0.3); drain3(0.6)  # down -> slice 2
 os.write(master3, b'\r'); time.sleep(0.4); drain3(1.0)     # open effect menu
-os.write(master3, b'\x1b[A'); time.sleep(0.3); drain3(0.6)  # up -> None
+for _ in range(5):
+    os.write(master3, b'\x1b[B'); time.sleep(0.2); drain3(0.4)  # wrap to None
 os.write(master3, b'\r'); time.sleep(0.4); drain3(1.0)
 check('slice 2 set to None', b'     2  None' in state3['last'])
 
@@ -306,6 +306,169 @@ if rc3 is None:
     p3.kill(); p3.wait()
 check('stretch session quits', rc3 is not None)
 os.close(master3)
+
+# --- Fourth session: Squish drops every other frame, then plays the kept
+# --- frames twice to keep the chunk length. ---
+existing = len(slicer_files())
+master4, slave4 = pty.openpty()
+fcntl.ioctl(master4, termios.TIOCSWINSZ, struct.pack('HHHH', 40, 80, 0, 0))
+p4 = subprocess.Popen(['./build/bin/App'], stdin=slave4, stdout=slave4,
+                      stderr=slave4, close_fds=True)
+os.close(slave4)
+time.sleep(1.2)
+state4 = {'buf': b'', 'last': b''}
+
+def drain4(t=1.0, stop=None):
+    end = time.time() + t
+    out = b''
+    while time.time() < end:
+        r, _, _ = select.select([master4], [], [], 0.1)
+        if r:
+            try:
+                c = os.read(master4, 65536)
+            except OSError:
+                break
+            if not c:
+                break
+            state4['buf'] += c
+            out += c
+            if stop and stop.encode() in out:
+                break
+    state4['last'] = out
+    return state4['buf']
+
+drain4(0.8)
+
+# Load ramp.wav (sliced/ still shifts the listing).
+os.write(master4, b'\x0f'); drain4(1.0, 'Files:')
+time.sleep(0.2); os.write(master4, b'\t'); time.sleep(0.3); drain4(0.5)
+os.write(master4, b'\x1b[B'); time.sleep(0.3); drain4(0.5)
+os.write(master4, b'\x1b[B'); time.sleep(0.3); drain4(0.5)
+os.write(master4, b'\x1b[B'); time.sleep(0.3); drain4(0.5)
+os.write(master4, b'\r'); time.sleep(0.8); drain4(1.2)
+
+# 1 bar, 1/2 slices -> 2 slices.
+os.write(master4, b'\r'); time.sleep(0.4); drain4(0.8)
+os.write(master4, b'\x1b[B'); time.sleep(0.3); drain4(0.5)
+os.write(master4, b'\x1b[C'); time.sleep(0.3); drain4(0.5)
+os.write(master4, b'\r'); time.sleep(0.5); drain4(1.0)
+check('2 slices configured (squish session)', b'Slices: 2' in state4['last'])
+
+# Slice 1 -> Squish, slice 2 -> None.
+os.write(master4, b'\x1b[B'); time.sleep(0.3); drain4(0.6)
+os.write(master4, b'\r'); time.sleep(0.4); drain4(1.0)     # open effect menu
+os.write(master4, b'\x1b[B'); time.sleep(0.3); drain4(0.6)  # Shuffle -> Reverse
+os.write(master4, b'\x1b[B'); time.sleep(0.3); drain4(0.6)  # -> Stretch
+os.write(master4, b'\x1b[B'); time.sleep(0.3); drain4(0.6)  # -> Squish
+os.write(master4, b'\r'); time.sleep(0.4); drain4(1.0)
+check('slice 1 set to Squish', b'     1  Squish' in state4['last'])
+os.write(master4, b'\x1b[B'); time.sleep(0.3); drain4(0.6)  # down -> slice 2
+os.write(master4, b'\r'); time.sleep(0.4); drain4(1.0)     # open effect menu
+for _ in range(5):
+    os.write(master4, b'\x1b[B'); time.sleep(0.2); drain4(0.4)  # wrap to None
+os.write(master4, b'\r'); time.sleep(0.4); drain4(1.0)
+check('slice 2 set to None', b'     2  None' in state4['last'])
+
+# Apply and verify chunk 1 is the even frames of the source, twice.
+os.write(master4, b'\x01'); time.sleep(1.5); drain4(1.5)
+files = slicer_files()
+check('squish-session slice created', len(files) == existing + 1)
+out_pcm = open(files[-1], 'rb').read()[44:]
+even = b''.join(c0[i:i + 2] for i in range(0, 8000, 4))
+check('first chunk keeps every other frame x2', out_pcm[:8000] == even + even)
+check('second chunk kept in original order', out_pcm[8000:16000] == c1)
+check('output differs from source', out_pcm != src_pcm)
+
+os.write(master4, b'q')
+time.sleep(1.0)
+rc4 = p4.poll()
+if rc4 is None:
+    p4.kill(); p4.wait()
+check('squish session quits', rc4 is not None)
+os.close(master4)
+
+# --- Fifth session: Stutter at 1/2 divides the chunk into 16ths, picks one
+# --- at random, and repeats it for the whole chunk. ---
+existing = len(slicer_files())
+master5, slave5 = pty.openpty()
+fcntl.ioctl(master5, termios.TIOCSWINSZ, struct.pack('HHHH', 40, 80, 0, 0))
+p5 = subprocess.Popen(['./build/bin/App'], stdin=slave5, stdout=slave5,
+                      stderr=slave5, close_fds=True)
+os.close(slave5)
+time.sleep(1.2)
+state5 = {'buf': b'', 'last': b''}
+
+def drain5(t=1.0, stop=None):
+    end = time.time() + t
+    out = b''
+    while time.time() < end:
+        r, _, _ = select.select([master5], [], [], 0.1)
+        if r:
+            try:
+                c = os.read(master5, 65536)
+            except OSError:
+                break
+            if not c:
+                break
+            state5['buf'] += c
+            out += c
+            if stop and stop.encode() in out:
+                break
+    state5['last'] = out
+    return state5['buf']
+
+drain5(0.8)
+
+# Load ramp.wav (sliced/ still shifts the listing).
+os.write(master5, b'\x0f'); drain5(1.0, 'Files:')
+time.sleep(0.2); os.write(master5, b'\t'); time.sleep(0.3); drain5(0.5)
+os.write(master5, b'\x1b[B'); time.sleep(0.3); drain5(0.5)
+os.write(master5, b'\x1b[B'); time.sleep(0.3); drain5(0.5)
+os.write(master5, b'\x1b[B'); time.sleep(0.3); drain5(0.5)
+os.write(master5, b'\r'); time.sleep(0.8); drain5(1.2)
+
+# 1 bar, 1/2 slices -> 2 slices (subdivision granularity = 1/16 of a chunk).
+os.write(master5, b'\r'); time.sleep(0.4); drain5(0.8)
+os.write(master5, b'\x1b[B'); time.sleep(0.3); drain5(0.5)
+os.write(master5, b'\x1b[C'); time.sleep(0.3); drain5(0.5)
+os.write(master5, b'\r'); time.sleep(0.5); drain5(1.0)
+check('2 slices configured (stutter session)', b'Slices: 2' in state5['last'])
+
+# Slice 1 -> Stutter, slice 2 -> None.
+os.write(master5, b'\x1b[B'); time.sleep(0.3); drain5(0.6)
+os.write(master5, b'\r'); time.sleep(0.4); drain5(1.0)     # open effect menu
+os.write(master5, b'\x1b[B'); time.sleep(0.3); drain5(0.6)  # Shuffle -> Reverse
+os.write(master5, b'\x1b[B'); time.sleep(0.3); drain5(0.6)  # -> Stretch
+os.write(master5, b'\x1b[B'); time.sleep(0.3); drain5(0.6)  # -> Squish
+os.write(master5, b'\x1b[B'); time.sleep(0.3); drain5(0.6)  # -> Stutter
+os.write(master5, b'\r'); time.sleep(0.4); drain5(1.0)
+check('slice 1 set to Stutter', b'     1  Stutter' in state5['last'])
+os.write(master5, b'\x1b[B'); time.sleep(0.3); drain5(0.6)  # down -> slice 2
+os.write(master5, b'\r'); time.sleep(0.4); drain5(1.0)     # open effect menu
+for _ in range(5):
+    os.write(master5, b'\x1b[B'); time.sleep(0.2); drain5(0.4)  # wrap to None
+os.write(master5, b'\r'); time.sleep(0.4); drain5(1.0)
+check('slice 2 set to None', b'     2  None' in state5['last'])
+
+# Apply; chunk 1 must be one 500-byte sub-piece repeated 16 times.
+os.write(master5, b'\x01'); time.sleep(1.5); drain5(1.5)
+files = slicer_files()
+check('stutter-session slice created', len(files) == existing + 1)
+out_pcm = open(files[-1], 'rb').read()[44:]
+st_blocks = [out_pcm[i:i + 500] for i in range(0, 8000, 500)]
+check('stutter chunk repeats one sub-piece', len(set(st_blocks)) == 1)
+cand = [c0[i:i + 500] for i in range(0, 8000, 500)]
+check('stutter sub-piece comes from the chunk', st_blocks[0] in cand)
+check('second chunk kept in original order', out_pcm[8000:16000] == c1)
+check('output differs from source', out_pcm != src_pcm)
+
+os.write(master5, b'q')
+time.sleep(1.0)
+rc5 = p5.poll()
+if rc5 is None:
+    p5.kill(); p5.wait()
+check('stutter session quits', rc5 is not None)
+os.close(master5)
 
 if FAILURES:
     print(f"\nFAILED: {FAILURES}")
