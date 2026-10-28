@@ -380,6 +380,8 @@ bool SliceWav(const std::filesystem::path& src, const std::filesystem::path& dst
           emitted += take;
         }
       }
+    } else if (effect == kEffectMute) {
+      out.insert(out.end(), chunk_bytes, 0);
     } else {
       out.insert(out.end(), decoded.bytes.begin() + offset,
                  decoded.bytes.begin() + offset + chunk_bytes);

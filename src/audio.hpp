@@ -50,6 +50,7 @@ enum SliceEffect : int {
   kEffectStretch = 3,
   kEffectSquish = 4,
   kEffectStutter = 5,
+  kEffectMute = 6,
 };
 
 // Slices |src| into |chunks| equal-length pieces, applies each piece's effect,
@@ -65,7 +66,8 @@ enum SliceEffect : int {
 // keeping the piece length while halving the material. A piece set to
 // |kEffectStutter| picks one random sub-piece and repeats it for the whole
 // chunk; the sub-piece granularity is chosen from |slice_power| (the exponent
-// of the 1/1..1/64 slice length setting used in the UI). Pieces with any other
+// of the 1/1..1/64 slice length setting used in the UI). A piece set to
+// |kEffectMute| outputs silence for the whole chunk. Pieces with any other
 // code keep their original data for now. When |effects| is empty or shorter
 // than |chunks|, the missing pieces are treated as |kEffectNone|. Returns false
 // if the source cannot be decoded or the write fails.

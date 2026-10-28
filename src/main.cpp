@@ -110,7 +110,8 @@ int RunApp() {
   const std::vector<std::string> kSliceOptions = {"1", "2", "4", "8",
                                                   "16", "32", "64"};
   const std::vector<std::string> kEffects = {"None", "Shuffle", "Reverse",
-                                             "Stretch", "Squish", "Stutter"};
+                                             "Stretch", "Squish", "Stutter",
+                                             "Mute"};
   const auto column_visible = [&]() {
     return bars_selected >= 0 && slice_selected >= 0;
   };
@@ -317,11 +318,12 @@ int RunApp() {
     if (!show_modal && !loaded_file.empty()) {
       if (dropdown_open) {
         if (event == ftxui::Event::ArrowUp) {
-          dropdown_sel = (dropdown_sel + 4) % 6;
+          dropdown_sel = (dropdown_sel + (static_cast<int>(kEffects.size()) - 1)) %
+                          static_cast<int>(kEffects.size());
           return true;
         }
         if (event == ftxui::Event::ArrowDown) {
-          dropdown_sel = (dropdown_sel + 1) % 6;
+          dropdown_sel = (dropdown_sel + 1) % static_cast<int>(kEffects.size());
           return true;
         }
         if (event == ftxui::Event::Return) {
