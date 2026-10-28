@@ -32,6 +32,10 @@ const ftxui::Event kCtrlR = ftxui::Event::Special("\x12");
 const ftxui::Event kApplyKey = ftxui::Event::Special("\x01");
 // Ctrl+X is transmitted as ASCII 0x18 (CAN).
 const ftxui::Event kCtrlX = ftxui::Event::Special("\x18");
+// Shift+Enter / Ctrl+Enter may arrive as different sequences depending on terminal.
+const ftxui::Event kShiftEnter1 = ftxui::Event::Special("\x1B[13;2u");
+const ftxui::Event kShiftEnter2 = ftxui::Event::Special("\x1B[27;2;13~");
+
 
 // Compact timestamp used in sliced output names: YYYYMMDD-HHMMSS-mmm.
 std::string Timestamp() {
@@ -326,6 +330,16 @@ int RunApp() {
           dropdown_sel = (dropdown_sel + 1) % static_cast<int>(kEffects.size());
           return true;
         }
+        if (event == ftxui::Event::Character('a') ||
+            event == ftxui::Event::Character('A')) {
+          if (column_focus < static_cast<int>(slice_effects.size())) {
+            for (size_t i = 0; i < slice_effects.size(); ++i) {
+              slice_effects[i] = dropdown_sel;
+            }
+          }
+          dropdown_open = false;
+          return true;
+        }
         if (event == ftxui::Event::Return) {
           if (column_focus < static_cast<int>(slice_effects.size())) {
             slice_effects[column_focus] = dropdown_sel;
@@ -356,6 +370,16 @@ int RunApp() {
             column_focus = 0;
           }
           clamp_scroll();
+          return true;
+        }
+        if (event == ftxui::Event::Character('a') ||
+            event == ftxui::Event::Character('A')) {
+          if (column_focus < static_cast<int>(slice_effects.size())) {
+            const int val = slice_effects[column_focus];
+            for (size_t i = 0; i < slice_effects.size(); ++i) {
+              slice_effects[i] = val;
+            }
+          }
           return true;
         }
         if (event == ftxui::Event::Return) {
