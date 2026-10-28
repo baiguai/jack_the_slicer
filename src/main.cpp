@@ -90,6 +90,7 @@ int RunApp() {
   int column_scroll = 0;           // first visible slice in the column
   bool dropdown_open = false;      // effect dropdown on the focused slice
   int dropdown_sel = 0;            // highlighted option in the dropdown
+  int play_highlight = -1;         // slice index being played
   jack::WavPlayer player;
 
   const auto on_open = [&](const fs::path& path) {
@@ -186,6 +187,25 @@ int RunApp() {
 
   auto main_screen = ftxui::Renderer([&] {
     player.Poll();
+    play_highlight = -1;
+    if (player.IsPlaying() && total_slices > 0) {
+      const size_t total_frames = player.TotalFrames();
+      if (total_frames > 0) {
+        const size_t current = player.CurrentFrame() % total_frames;
+        const size_t frames_per_chunk =
+            total_frames / static_cast<size_t>(total_slices);
+        if (frames_per_chunk > 0) {
+          play_highlight =
+              static_cast<int>(current / frames_per_chunk);
+          if (play_highlight < 0) {
+            play_highlight = 0;
+          }
+          if (play_highlight >= total_slices) {
+            play_highlight = total_slices - 1;
+          }
+        }
+      }
+    }
     ftxui::Elements lines;
     lines.push_back(ftxui::text(" jack_the_slicer ") | ftxui::bold);
     lines.push_back(ftxui::separator());
@@ -236,11 +256,21 @@ int RunApp() {
         num = std::string(4 - std::min<int>(4, num.size()), ' ') + num;
         const std::string effect_text = kEffects[slice_effects[idx]];
         auto row = ftxui::text("  " + num + "  " + effect_text);
-        if (idx == column_focus) {
+        if (idx == column_focus && idx == play_highlight) {
+          row |= ftxui::color(ftxui::Color::Magenta) | ftxui::bold;
+        } else if (idx == play_highlight) {
+          row |= ftxui::color(ftxui::Color::Yellow) | ftxui::bold;
+        } else if (idx == column_focus) {
           row |= ftxui::color(ftxui::Color::Cyan) | ftxui::bold;
         }
-        if (slice_effects[idx] != 0) {
+        if (slice_effects[idx] != 0 && idx != play_highlight &&
+            idx != column_focus) {
           row |= ftxui::color(ftxui::Color::Green);
+        } else if (slice_effects[idx] != 0 && idx == play_highlight) {
+          row |= ftxui::color(ftxui::Color::Yellow) | ftxui::bold;
+        } else if (slice_effects[idx] != 0 && idx == column_focus &&
+                   idx != play_highlight) {
+          row |= ftxui::color(ftxui::Color::Cyan) | ftxui::bold;
         }
         lines.push_back(row);
         ++shown;
@@ -278,6 +308,11 @@ int RunApp() {
         (event == ftxui::Event::Character('p') ||
          event == ftxui::Event::Character('P'))) {
       player.Play(active_file, event == ftxui::Event::Character('P'));
+      column_scroll = 0;
+      if (total_slices > 0) {
+        play_highlight = 0;
+      }
+      clamp_scroll();
       return true;
     }
     if (!show_modal && event == kApplyKey && !loaded_file.empty()) {
@@ -298,6 +333,11 @@ int RunApp() {
       std::mt19937 rng(std::random_device{}());
       if (jack::SliceWav(src, dst, chunks, effects, rng(), slice_selected)) {
         active_file = dst.string();
+        column_scroll = 0;
+        if (column_focus >= total_slices) {
+          column_focus = std::max(0, total_slices - 1);
+        }
+        clamp_scroll();
       }
       return true;
     }
@@ -467,6 +507,15 @@ int RunApp() {
   auto app = ftxui::Modal(ftxui::Make<FocusableHost>(main_caught), file_browser,
                           &show_modal);
   app = ftxui::Modal(app, help, &show_help);
+
+  std::thread refresher([&] {
+    while (true) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(16));
+      screen.Post([&] {});
+      screen.RequestAnimationFrame();
+    }
+  });
+  refresher.detach();
 
   screen.Loop(app);
   return 0;

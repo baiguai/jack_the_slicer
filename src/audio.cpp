@@ -125,7 +125,7 @@ struct WavPlayer::Impl {
   ma_format format = ma_format_s16;
   ma_uint32 channels = 0;
   bool loop = false;
-  size_t frame_index = 0;
+  std::atomic<size_t> frame_index{0};
   std::string current_file;
 
   // Shared with the audio thread via atomics.
@@ -264,6 +264,21 @@ bool WavPlayer::IsLooping() const {
 
 const std::string& WavPlayer::CurrentFile() const {
   return impl_->current_file;
+}
+
+size_t WavPlayer::CurrentFrame() const {
+  return impl_->frame_index.load();
+}
+
+size_t WavPlayer::TotalFrames() const {
+  if (impl_->channels == 0 || impl_->bytes.empty()) {
+    return 0;
+  }
+  const ma_uint32 bpf = ma_get_bytes_per_frame(impl_->format, impl_->channels);
+  if (bpf == 0) {
+    return 0;
+  }
+  return impl_->bytes.size() / bpf;
 }
 
 bool SliceWav(const std::filesystem::path& src, const std::filesystem::path& dst,

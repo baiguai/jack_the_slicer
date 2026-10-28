@@ -32,6 +32,10 @@ class WavPlayer {
   bool IsPlaying() const;
   bool IsLooping() const;
   const std::string& CurrentFile() const;
+  // Current playback position in frames (0 if stopped).
+  size_t CurrentFrame() const;
+  // Total frames in the loaded buffer (0 if stopped).
+  size_t TotalFrames() const;
 
   // Implementation detail (hidden in audio.cpp), but must be public so the
   // miniaudio data callback can name the type.
